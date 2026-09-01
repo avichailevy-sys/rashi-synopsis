@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>רש״י על התורה — סינופסיס של עדי נוסח</title>
+<style>
+:root{
+  --ink:#221f1a; --paper:#fbfaf6; --rule:#ded7ca; --dim:#867e70; --mark:#7d2b18;
+  --panel:#efeae0; --ref:#edf1ec; --pr:#eaeff5; --warn:#fbebd2; --acc:#2f5d7c;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:"SBL Hebrew","Frank Ruehl CLM","Times New Roman",serif;font-size:14px}
+header{position:sticky;top:0;z-index:30;background:var(--panel);
+  border-bottom:1px solid var(--rule);padding:.5rem .9rem;
+  display:flex;gap:.8rem;align-items:center;flex-wrap:wrap}
+h1{font-size:.92rem;margin:0;font-weight:600}
+.m{font-size:.73rem;color:var(--dim);font-family:ui-monospace,monospace}
+button{font:inherit;font-size:.8rem;padding:.24rem .7rem;background:var(--paper);
+  border:1px solid var(--rule);border-radius:2px;cursor:pointer}
+button:hover{background:#fff}
+button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+select,input[type=number]{font:inherit;font-size:.8rem;padding:.22rem;
+  border:1px solid var(--rule);background:var(--paper)}
+.main{display:grid;grid-template-columns:1fr 1fr;height:calc(100vh - 3rem)}
+.left{overflow:auto;border-left:1px solid var(--rule);padding:.8rem}
+.right{overflow:auto;background:#e9e3d7;padding:.6rem;text-align:center}
+.right img{max-width:100%;box-shadow:0 1px 10px rgba(0,0,0,.25)}
+.blk{margin-bottom:.9rem;padding:.5rem .6rem;border-right:3px solid var(--rule);background:#fff}
+.blk h4{margin:0 0 .3rem;font-size:.74rem;color:var(--dim);font-weight:600;
+  font-family:ui-monospace,monospace;display:flex;gap:.5rem;align-items:center}
+.blk.lei{border-color:#5b7f5b;background:var(--ref)}
+.blk.pr{border-color:#5b7391;background:var(--pr)}
+.blk.ms{border-color:var(--mark)}
+.blk.ms.weak{background:var(--warn)}
+.tx{line-height:1.85}
+.none{color:#b9b1a3;font-style:italic;font-size:.8rem}
+.dh{font-weight:600;color:var(--mark);font-size:1.05rem}
+kbd{font-family:ui-monospace,monospace;font-size:.68rem;background:#fff;
+  border:1px solid var(--rule);border-radius:2px;padding:.02rem .3rem}
+#loading{padding:2rem;color:var(--dim)}
+@media(max-width:900px){.main{grid-template-columns:1fr;height:auto}}
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">רש״י — סינופסיס</h1>
+  <span style="display:flex;gap:.35rem;align-items:center">
+    <button id="p">הקודם</button>
+    <input id="j" type="number" min="1" value="1" style="width:4.5rem">
+    <span class="m" id="tot"></span>
+    <button id="n">הבא</button>
+  </span>
+  <label class="m"><input type="checkbox" id="only"> רק שורות שאותרו</label>
+  <span class="m">תמונה:</span><select id="pick"></select>
+  <span class="m" id="pos"></span>
+  <span class="m"><kbd>←</kbd><kbd>→</kbd></span>
+</header>
+<div id="loading">טוען…</div>
+<div class="main" id="wrap" style="display:none">
+  <div class="left" id="L"></div>
+  <div class="right" id="R"></div>
+</div>
+
+<script>
+// Set to an IIIF base URL to load folios from a remote service instead of ./images/
+const IMAGE_BASE = "./images/";
+
+const $ = id => document.getElementById(id);
+const esc = s => (s||"").replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+let V = null, i = 0, cur = null;
+
+fetch("./data/lech_lecha.json")
+  .then(r => { if(!r.ok) throw new Error(r.status); return r.json(); })
+  .then(d => { V = d; init(); })
+  .catch(e => { $("loading").textContent = "שגיאה בטעינת הנתונים: " + e.message; });
+
+function init(){
+  cur = V.meta.witnesses[0];
+  $("title").textContent = "רש״י — " + V.meta.parasha + " · " + V.meta.range;
+  $("tot").textContent = "/ " + V.meta.nrows;
+  $("j").max = V.meta.nrows;
+  V.meta.witnesses.forEach(m => {
+    const o = document.createElement("option");
+    o.value = m; o.textContent = m + " (" + V.meta.aligned[m] + ")";
+    $("pick").appendChild(o);
+  });
+  $("loading").style.display = "none";
+  $("wrap").style.display = "grid";
+  render();
+}
+
+function visible(){
+  const only = $("only").checked;
+  return V.rows.map((r,k)=>k).filter(k =>
+    !only || V.meta.witnesses.some(m => V.rows[k].ms[m]));
+}
+
+function render(){
+  const list = visible();
+  if(!list.length) return;
+  if(!list.includes(i)) i = list.find(x => x >= i) ?? list[0];
+  const r = V.rows[i];
+  let h = `<div style="margin-bottom:.7rem"><span class="m">${r.r}</span> <span class="dh">${esc(r.dh)}</span></div>`;
+  h += `<div class="blk lei"><h4>לייפציג 1</h4><div class="tx">${esc(r.lei) || "<span class='none'>—</span>"}</div></div>`;
+  if(r.alh) h += `<div class="blk lei"><h4>על התורה</h4><div class="tx">${esc(r.alh)}</div></div>`;
+  if(r.std) h += `<div class="blk pr"><h4>נוסח סטנדרטי (רפ״ה)</h4><div class="tx">${esc(r.std)}</div></div>`;
+  if(r.rom) h += `<div class="blk pr"><h4>דפוס רומא</h4><div class="tx">${esc(r.rom)}</div></div>`;
+  V.meta.witnesses.forEach(m => {
+    const c = r.ms[m];
+    if(!c){ h += `<div class="blk ms"><h4>${m}</h4><span class="none">לא אותר</span></div>`; return; }
+    h += `<div class="blk ms${c.s < 88 ? " weak" : ""}"><h4>${m}
+      <span>ציון ${c.s} · דף ${c.pg}/טור ${c.col}</span>
+      <button style="margin-right:auto;font-size:.68rem;padding:0 .4rem"
+        onclick="show('${m}')">הצג דף</button></h4>
+      <div class="tx">${esc(c.t)}</div></div>`;
+  });
+  $("L").innerHTML = h;
+  $("j").value = i + 1;
+  const c = r.ms[cur];
+  $("pos").textContent = c ? `${cur} · דף ${c.pg}` : cur + " — אין";
+  $("R").innerHTML = (c && c.img)
+    ? `<img src="${IMAGE_BASE}${c.img}" alt="דף ${c.pg}">`
+    : `<div class="none" style="padding:2rem">אין תמונה לשורה זו</div>`;
+  $("L").scrollTop = 0; $("R").scrollTop = 0;
+}
+
+function show(m){ cur = m; $("pick").value = m; render(); }
+
+function go(d){
+  const list = visible();
+  let k = list.indexOf(i); if(k < 0) k = 0;
+  k = Math.max(0, Math.min(list.length - 1, k + d));
+  i = list[k]; render();
+}
+
+$("p").onclick = () => go(-1);
+$("n").onclick = () => go(1);
+$("j").onchange = () => { i = Math.max(0, Math.min(V.meta.nrows - 1, +$("j").value - 1)); render(); };
+$("pick").onchange = () => { cur = $("pick").value; render(); };
+$("only").onchange = render;
+document.addEventListener("keydown", e => {
+  if(e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+  if(e.key === "ArrowRight") go(-1);
+  if(e.key === "ArrowLeft") go(1);
+});
+</script>
+</body>
+</html>
